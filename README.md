@@ -83,3 +83,9 @@ This repository includes a `render.yaml` file for instant deployment:
 
 ---
 **Developed by [Muhammad Awad](https://github.com/M-Awad-27)**
+
+## 👨‍💻 Author
+
+<h1 align="center">
+  🍁 Made by <span style="color: #FF0055;">M</span><span style="color: #00E5FF;">A</span> 🍁
+</h1>
