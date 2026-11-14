@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import math
+import uuid
 
 
 # --- Constants ---
@@ -17,16 +18,21 @@ MIN_STUDY_HOURS = 0.5
 
 BREAK_INTERVAL_HOURS = 1.5
 BREAK_DURATION_MINUTES = 15
+DEFAULT_POMODORO_MINUTES = 25
 
 
 # --- Main Entry Point ---
-def generate_study_plan(subjects, daily_hours, preferred_time):
+def generate_study_plan(subjects, daily_hours, preferred_time, focus_minutes=DEFAULT_POMODORO_MINUTES):
+    if not isinstance(focus_minutes, (int, float)) or focus_minutes <= 0:
+        focus_minutes = DEFAULT_POMODORO_MINUTES
+
     scored_subjects = _calculate_priority_scores(subjects)
-    allocated_subjects = _allocate_study_hours(scored_subjects, daily_hours)
-    daily_timetable = _build_daily_timetable(allocated_subjects, daily_hours, preferred_time)
+    allocated_subjects = _allocate_study_hours(scored_subjects, daily_hours, focus_minutes)
+    daily_timetable = _build_daily_timetable(allocated_subjects, daily_hours, preferred_time, focus_minutes)
     suggestions = _generate_suggestions(allocated_subjects)
-    weekly_plan = _build_weekly_plan(allocated_subjects, daily_hours, preferred_time)
+    weekly_plan = _build_weekly_plan(allocated_subjects, daily_hours, preferred_time, focus_minutes)
     breaks = _calculate_breaks(daily_hours, preferred_time)
+    total_daily_pomodoros = sum(s["pomodoros"] for s in allocated_subjects)
 
     return {
         "priority_ranking": allocated_subjects,
@@ -34,7 +40,10 @@ def generate_study_plan(subjects, daily_hours, preferred_time):
         "suggestions": suggestions,
         "weekly_plan": weekly_plan,
         "breaks": breaks,
+        "focus_minutes": focus_minutes,
+        "total_daily_pomodoros": total_daily_pomodoros,
     }
+
 
 
 # --- Priority Score Calculation ---
@@ -99,8 +108,14 @@ def _calculate_priority_scores(subjects):
     return scored
 
 
+def _calc_pomodoros(hours, focus_minutes=DEFAULT_POMODORO_MINUTES):
+    if hours <= 0:
+        return 0
+    return max(1, math.ceil((hours * 60) / focus_minutes))
+
+
 # --- Study Hour Allocation ---
-def _allocate_study_hours(scored_subjects, daily_hours):
+def _allocate_study_hours(scored_subjects, daily_hours, focus_minutes=DEFAULT_POMODORO_MINUTES):
     if not scored_subjects:
         return scored_subjects
 
@@ -110,6 +125,8 @@ def _allocate_study_hours(scored_subjects, daily_hours):
         equal_hours = round(daily_hours / num_subjects, 2)
         for s in scored_subjects:
             s["allocated_hours"] = equal_hours
+            s["allocated_minutes"] = round(equal_hours * 60)
+            s["pomodoros"] = _calc_pomodoros(equal_hours, focus_minutes)
             s["percentage"] = round(100 / num_subjects, 1)
         return scored_subjects
 
@@ -119,6 +136,8 @@ def _allocate_study_hours(scored_subjects, daily_hours):
         equal_hours = round(daily_hours / num_subjects, 2)
         for s in scored_subjects:
             s["allocated_hours"] = equal_hours
+            s["allocated_minutes"] = round(equal_hours * 60)
+            s["pomodoros"] = _calc_pomodoros(equal_hours, focus_minutes)
             s["percentage"] = round(100 / num_subjects, 1)
         return scored_subjects
 
@@ -145,13 +164,15 @@ def _allocate_study_hours(scored_subjects, daily_hours):
     total_allocated = sum(s["allocated_hours"] for s in scored_subjects)
     for s in scored_subjects:
         s["allocated_hours"] = round(s["allocated_hours"], 2)
+        s["allocated_minutes"] = round(s["allocated_hours"] * 60)
+        s["pomodoros"] = _calc_pomodoros(s["allocated_hours"], focus_minutes)
         s["percentage"] = round((s["allocated_hours"] / total_allocated) * 100, 1)
 
     return scored_subjects
 
 
 # --- Daily Timetable Builder ---
-def _build_daily_timetable(allocated_subjects, daily_hours, preferred_time):
+def _build_daily_timetable(allocated_subjects, daily_hours, preferred_time, focus_minutes=DEFAULT_POMODORO_MINUTES):
     start_times = {
         "morning": 6,
         "evening": 16,
@@ -168,34 +189,40 @@ def _build_daily_timetable(allocated_subjects, daily_hours, preferred_time):
     for subject in allocated_subjects:
         remaining = subject["allocated_hours"]
 
-        while remaining > 0:
-            if study_streak >= BREAK_INTERVAL_HOURS:
+        while remaining > 0.001:
+            if round(study_streak, 2) >= BREAK_INTERVAL_HOURS:
                 break_end = current_time + timedelta(minutes=BREAK_DURATION_MINUTES)
                 timetable.append({
                     "time": f"{_format_time(current_time)} - {_format_time(break_end)}",
+                    "start_24h": current_time.strftime("%H:%M"),
+                    "end_24h": break_end.strftime("%H:%M"),
                     "subject": "Break",
                     "duration": BREAK_DURATION_MINUTES / 60,
+                    "pomodoros": 0,
                     "is_break": True,
                 })
                 current_time = break_end
                 study_streak = 0.0
 
-            time_until_break = BREAK_INTERVAL_HOURS - study_streak
-            session_duration = min(remaining, time_until_break)
-            session_duration = round(session_duration, 2)
+            time_until_break = round(BREAK_INTERVAL_HOURS - study_streak, 2)
+            session_duration = round(min(remaining, time_until_break), 2)
+            if session_duration <= 0:
+                break
 
             end_time = current_time + timedelta(hours=session_duration)
             timetable.append({
                 "time": f"{_format_time(current_time)} - {_format_time(end_time)}",
+                "start_24h": current_time.strftime("%H:%M"),
+                "end_24h": end_time.strftime("%H:%M"),
                 "subject": subject["name"],
                 "duration": session_duration,
+                "pomodoros": _calc_pomodoros(session_duration, focus_minutes),
                 "is_break": False,
             })
 
             current_time = end_time
-            study_streak += session_duration
-            remaining -= session_duration
-            remaining = round(remaining, 2)
+            study_streak = round(study_streak + session_duration, 2)
+            remaining = round(remaining - session_duration, 2)
 
     return timetable
 
@@ -251,9 +278,10 @@ def _generate_suggestions(allocated_subjects):
 
 
 # --- Weekly Plan Builder ---
-def _build_weekly_plan(allocated_subjects, daily_hours, preferred_time):
+def _build_weekly_plan(allocated_subjects, daily_hours, preferred_time, focus_minutes=DEFAULT_POMODORO_MINUTES):
     day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-    today_weekday = datetime.now().weekday()
+    today_date = datetime.now().date()
+    today_weekday = today_date.weekday()
 
     weekly = []
 
@@ -262,15 +290,18 @@ def _build_weekly_plan(allocated_subjects, daily_hours, preferred_time):
                   allocated_subjects[:i % len(allocated_subjects)]
 
         day_index = (today_weekday + i) % 7
-        day_timetable = _build_daily_timetable(rotated, daily_hours, preferred_time)
+        current_date = today_date + timedelta(days=i)
+        day_timetable = _build_daily_timetable(rotated, daily_hours, preferred_time, focus_minutes)
 
         weekly.append({
             "day": day_names[day_index],
+            "date": current_date.isoformat(),
             "is_today": i == 0,
             "subjects": [
                 {
                     "name": s["name"],
                     "hours": s["allocated_hours"],
+                    "pomodoros": s["pomodoros"],
                     "priority_level": s["priority_level"],
                     "difficulty": s["difficulty"],
                 }
@@ -325,6 +356,172 @@ def _get_break_tip(break_number):
         "Listen to a favorite song to reset your mood.",
     ]
     return tips[break_number % len(tips)]
+
+
+# --- julianunesp iCalendar (.ics) Export Integration ---
+def _escape_ics_text(text):
+    return (
+        str(text)
+        .replace("\\", "\\\\")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+        .replace("\r\n", "\\n")
+        .replace("\n", "\\n")
+    )
+
+
+def create_calendar_events(study_schedule, start_time_str, timezone="Asia/Taipei", daily_study_limit_hours=5, course_name="Study"):
+    """
+    Create iCalendar (.ics) events from study schedule (julianunesp study-scheduler-generator format).
+
+    Args:
+        study_schedule (dict): Dictionary mapping dates to lists of classes
+            Each entry: [status, subject_name, scheduled_duration_min, original_duration_min]
+            (or 5th element: pomodoros count)
+        start_time_str (str): Start time in format 'HH:MM'
+        timezone (str): Timezone name (e.g., 'Asia/Taipei', 'America/Sao_Paulo')
+        daily_study_limit_hours (float): Maximum hours per day
+        course_name (str): Name of the course to include in event title
+
+    Returns:
+        bytes: iCalendar (.ics) data in UTF-8 bytes format
+    """
+    try:
+        from icalendar import Calendar, Event
+        import pytz
+        use_icalendar_lib = True
+    except ImportError:
+        use_icalendar_lib = False
+
+    if use_icalendar_lib:
+        cal = Calendar()
+        cal.add('prodid', '-//Study Schedule Calendar//mxm.dk//')
+        cal.add('version', '2.0')
+        local_tz = pytz.timezone(timezone)
+
+        for day, classes in study_schedule.items():
+            if isinstance(day, str):
+                day = datetime.strptime(day, '%Y-%m-%d').date()
+            start_datetime = datetime.combine(day, datetime.strptime(start_time_str, '%H:%M').time())
+            start_datetime = local_tz.localize(start_datetime)
+            end_datetime = start_datetime + timedelta(minutes=float(daily_study_limit_hours) * 60)
+
+            event = Event()
+            event.add('summary', f"📚 {course_name} - Study Block")
+            event.add('dtstart', start_datetime)
+            event.add('dtend', end_datetime)
+
+            description_lines = ["Classes / Subjects for today:\n"]
+            for cls in classes:
+                class_name = cls[1]
+                original_duration_minutes = cls[3]
+                pomodoros = cls[4] if len(cls) > 4 else _calc_pomodoros(original_duration_minutes / 60.0)
+
+                total_seconds = original_duration_minutes * 60
+                hours = int(total_seconds // 3600)
+                minutes = int((total_seconds % 3600) // 60)
+                seconds = int(total_seconds % 60)
+                duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+                description_lines.append(f"⬜ {class_name} ({duration_str}) — 🍅 {pomodoros} Pomodoros")
+
+            description_lines.append("\n✏️ Update ⬜ to ✅ as you complete each class!")
+            event.add('description', '\n'.join(description_lines))
+            cal.add_component(event)
+
+        return cal.to_ical()
+
+    # Built-in RFC 5545 generator (zero external dependencies)
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Study Schedule Calendar//mxm.dk//",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        f"X-WR-CALNAME:{_escape_ics_text(course_name)}",
+        f"X-WR-TIMEZONE:{timezone}",
+    ]
+
+    dtstamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+
+    for day, classes in study_schedule.items():
+        if isinstance(day, str):
+            day = datetime.strptime(day, "%Y-%m-%d").date()
+        start_time_obj = datetime.strptime(start_time_str, "%H:%M").time()
+        start_dt = datetime.combine(day, start_time_obj)
+        end_dt = start_dt + timedelta(minutes=float(daily_study_limit_hours) * 60)
+
+        description_lines = ["Classes / Subjects for today:\n"]
+        for cls in classes:
+            class_name = cls[1]
+            original_duration_minutes = cls[3]
+            pomodoros = cls[4] if len(cls) > 4 else _calc_pomodoros(original_duration_minutes / 60.0)
+
+            total_seconds = original_duration_minutes * 60
+            hours = int(total_seconds // 3600)
+            minutes = int((total_seconds % 3600) // 60)
+            seconds = int(total_seconds % 60)
+            duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+            description_lines.append(f"⬜ {class_name} ({duration_str}) — 🍅 {pomodoros} Pomodoros")
+
+        description_lines.append("\n✏️ Update ⬜ to ✅ as you complete each class!")
+        desc_text = _escape_ics_text("\n".join(description_lines))
+        summary_text = _escape_ics_text(f"📚 {course_name} - Study Block")
+
+        lines.extend([
+            "BEGIN:VEVENT",
+            f"UID:{uuid.uuid4()}@smart-study-planner",
+            f"DTSTAMP:{dtstamp}",
+            f"DTSTART;TZID={timezone}:{start_dt.strftime('%Y%m%dT%H%M%S')}",
+            f"DTEND;TZID={timezone}:{end_dt.strftime('%Y%m%dT%H%M%S')}",
+            f"SUMMARY:{summary_text}",
+            f"DESCRIPTION:{desc_text}",
+            "END:VEVENT",
+        ])
+
+    lines.append("END:VCALENDAR")
+    return ("\r\n".join(lines) + "\r\n").encode("utf-8")
+
+
+def generate_plan_ics(plan, preferred_time="morning", daily_hours=5.0, timezone="Asia/Taipei", course_name="Smart Study Plan"):
+    """
+    Convert the weighted study plan into julianunesp's study_schedule format and generate .ics bytes.
+    Includes both daily study blocks (with checklist & Pomodoro counts) and exam date reminders.
+    """
+    start_times = {
+        "morning": "06:00",
+        "evening": "16:00",
+        "night": "20:00",
+    }
+    start_time_str = start_times.get(str(preferred_time).lower(), "06:00")
+    focus_minutes = plan.get("focus_minutes", DEFAULT_POMODORO_MINUTES)
+
+    study_schedule = {}
+    today_date = datetime.now().date()
+
+    for i, day_plan in enumerate(plan.get("weekly_plan", [])):
+        day_date = today_date + timedelta(days=i)
+        classes_for_day = []
+        for subj in day_plan.get("subjects", []):
+            duration_mins = float(subj["hours"]) * 60.0
+            pomodoros = subj.get("pomodoros", _calc_pomodoros(subj["hours"], focus_minutes))
+            classes_for_day.append([
+                "Not Started",
+                f"{subj['name']} [{subj['priority_level']} Priority]",
+                duration_mins,
+                duration_mins,
+                pomodoros,
+            ])
+        study_schedule[day_date] = classes_for_day
+
+    return create_calendar_events(
+        study_schedule=study_schedule,
+        start_time_str=start_time_str,
+        timezone=timezone,
+        daily_study_limit_hours=daily_hours,
+        course_name=course_name,
+    )
 
 
 # --- Test Block ---

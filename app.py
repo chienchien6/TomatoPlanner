@@ -1,14 +1,88 @@
-from flask import Flask, render_template, request, jsonify
-from planner_engine import generate_study_plan
+from flask import Flask, render_template, request, jsonify, Response
+from planner_engine import generate_study_plan, generate_plan_ics, DEFAULT_POMODORO_MINUTES
 from datetime import datetime
+import base64
+import json
+import os
+import sqlite3
 
 app = Flask(__name__)
+
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "study_planner.db")
+
+
+def init_db():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS app_state (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
+
+
+def db_get(key, default=None):
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            row = conn.execute("SELECT value FROM app_state WHERE key = ?", (key,)).fetchone()
+            if row:
+                return json.loads(row[0])
+    except Exception:
+        pass
+    return default
+
+
+def db_set(key, value):
+    now_iso = datetime.now().isoformat()
+    payload = json.dumps(value, ensure_ascii=False)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO app_state (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = excluded.updated_at
+            """,
+            (key, payload, now_iso),
+        )
+        conn.commit()
+
+
+init_db()
 
 
 # --- Serve Main Page ---
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+# --- Persistent State API (SQLite Database) ---
+@app.route("/api/state", methods=["GET"])
+def get_saved_state():
+    return jsonify({
+        "success": True,
+        "study_state": db_get("study_state"),
+        "flow_state": db_get("flow_state"),
+    })
+
+
+@app.route("/api/state", methods=["POST"])
+def save_app_state():
+    try:
+        data = request.get_json() or {}
+        if "study_state" in data and data["study_state"] is not None:
+            db_set("study_state", data["study_state"])
+        if "flow_state" in data and data["flow_state"] is not None:
+            db_set("flow_state", data["flow_state"])
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # --- Generate Study Plan API ---
@@ -23,17 +97,79 @@ def generate_plan():
         subjects = data.get("subjects", [])
         daily_hours = data.get("daily_hours", 0)
         preferred_time = data.get("preferred_time", "morning")
+        focus_minutes = data.get("focus_minutes", DEFAULT_POMODORO_MINUTES)
+        timezone = data.get("timezone", "Asia/Taipei")
 
         errors = validate_input(subjects, daily_hours, preferred_time)
         if errors:
             return jsonify({"error": errors}), 400
 
-        plan = generate_study_plan(subjects, daily_hours, preferred_time)
+        plan = generate_study_plan(subjects, daily_hours, preferred_time, focus_minutes)
+        ics_bytes = generate_plan_ics(
+            plan=plan,
+            preferred_time=preferred_time,
+            daily_hours=daily_hours,
+            timezone=timezone,
+            course_name="Smart Study Plan",
+        )
+        plan["calendar_ics_b64"] = base64.b64encode(ics_bytes).decode("utf-8")
+
+        # Automatically persist the generated plan and form inputs to SQLite DB
+        db_set("study_state", {
+            "subjects": subjects,
+            "daily_hours": daily_hours,
+            "preferred_time": preferred_time,
+            "plan": plan,
+            "saved_date": datetime.now().strftime("%Y-%m-%d"),
+        })
 
         return jsonify({"success": True, "plan": plan})
 
     except Exception as e:
         return jsonify({"error": f"Server error: {str(e)}"}), 500
+
+
+# --- Export .ics Calendar Endpoint (julianunesp integration) ---
+@app.route("/export-ics", methods=["POST"])
+def export_ics():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        subjects = data.get("subjects", [])
+        daily_hours = data.get("daily_hours", 5)
+        preferred_time = data.get("preferred_time", "morning")
+        focus_minutes = data.get("focus_minutes", DEFAULT_POMODORO_MINUTES)
+        timezone = data.get("timezone", "Asia/Taipei")
+        course_name = data.get("course_name", "Smart Study Plan")
+
+        if "plan" in data and isinstance(data["plan"], dict):
+            plan = data["plan"]
+        else:
+            errors = validate_input(subjects, daily_hours, preferred_time)
+            if errors:
+                return jsonify({"error": errors}), 400
+            plan = generate_study_plan(subjects, daily_hours, preferred_time, focus_minutes)
+
+        ics_bytes = generate_plan_ics(
+            plan=plan,
+            preferred_time=preferred_time,
+            daily_hours=daily_hours,
+            timezone=timezone,
+            course_name=course_name,
+        )
+
+        return Response(
+            ics_bytes,
+            mimetype="text/calendar; charset=utf-8",
+            headers={
+                "Content-Disposition": "attachment; filename=study_schedule.ics"
+            },
+        )
+    except Exception as e:
+        return jsonify({"error": f"Failed to export .ics: {str(e)}"}), 500
+
 
 
 # --- Input Validation ---
