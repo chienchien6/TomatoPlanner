@@ -8,3 +8,5 @@ env/
 *.log
 .DS_Store
 *.db
+Flow-OS/
+study-scheduler-generator/
