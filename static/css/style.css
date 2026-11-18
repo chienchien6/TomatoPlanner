@@ -2890,3 +2890,419 @@ body {
         opacity: 1;
     }
 }
+
+/* ==========================================================================
+   6. 7-Day Weekday Switcher, Daily Rollover Banner & Monthly Check-in Calendar
+   ========================================================================== */
+
+.flow-day-Rollover-hint {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    line-height: 1.4;
+}
+
+.flow-day-Rollover-hint strong {
+    color: #38bdf8;
+}
+
+.flow-weekday-switcher {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+    background: rgba(10, 10, 26, 0.65);
+    padding: 6px;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 640px) {
+    .flow-weekday-switcher {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+.flow-weekday-tab {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: var(--radius-sm);
+    padding: 6px 4px;
+    color: var(--text-secondary);
+    font-family: var(--font-family);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    transition: all var(--transition-fast);
+}
+
+.flow-weekday-tab:hover {
+    border-color: rgba(56, 189, 248, 0.45);
+    color: var(--text-primary);
+    transform: translateY(-1px);
+}
+
+.flow-weekday-tab.is-today {
+    border-color: rgba(0, 243, 255, 0.4);
+}
+
+.flow-weekday-tab.is-checked {
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(52, 211, 153, 0.45);
+}
+
+.flow-weekday-tab.active {
+    background: linear-gradient(135deg, rgba(79, 70, 229, 0.35), rgba(14, 165, 233, 0.3));
+    border-color: #38bdf8;
+    color: #ffffff;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+}
+
+.wd-top-row {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+.wd-today-dot {
+    font-size: 0.62rem;
+    background: rgba(0, 243, 255, 0.2);
+    color: #00f3ff;
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-weight: 800;
+}
+
+.wd-status-icon {
+    font-size: 0.68rem;
+    font-weight: 800;
+}
+
+.wd-date {
+    font-size: 0.7rem;
+    opacity: 0.8;
+    font-variant-numeric: tabular-nums;
+}
+
+.flow-daily-checkin-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    background: rgba(56, 189, 248, 0.08);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    transition: all var(--transition-fast);
+}
+
+.flow-daily-checkin-bar.is-checked-in {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.16), rgba(5, 150, 105, 0.12));
+    border-color: rgba(52, 211, 153, 0.5);
+    color: #d1fae5;
+}
+
+.flow-daily-checkin-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1.4;
+}
+
+.flow-checkin-status-icon {
+    font-size: 1.15rem;
+    flex-shrink: 0;
+}
+
+.flow-checkin-action-btn {
+    flex-shrink: 0;
+    padding: 7px 14px;
+    border-radius: 999px;
+    border: 1px solid #34d399;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #ffffff;
+    font-family: var(--font-family);
+    font-size: 0.78rem;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    transition: all var(--transition-fast);
+}
+
+.flow-checkin-action-btn:hover {
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.45);
+}
+
+.flow-checkin-action-btn.checked {
+    background: rgba(16, 185, 129, 0.22);
+    color: #6ee7b7;
+    box-shadow: none;
+}
+
+/* Monthly Study Check-in Calendar Card */
+.calendar-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.calendar-brand-badge {
+    background: linear-gradient(135deg, #10b981, #0ea5e9);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 800;
+    padding: 4px 12px;
+    border-radius: 999px;
+    letter-spacing: 0.5px;
+}
+
+.calendar-stat-pill {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 999px;
+}
+
+.calendar-stat-pill strong {
+    color: #fbbf24;
+    font-weight: 800;
+}
+
+.calendar-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.calendar-today-checkin-btn {
+    padding: 9px 18px;
+    border-radius: 999px;
+    border: 1px solid #4ade80;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #ffffff;
+    font-family: var(--font-family);
+    font-size: 0.86rem;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.35);
+    transition: all var(--transition-fast);
+}
+
+.calendar-today-checkin-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(16, 185, 129, 0.55);
+}
+
+.calendar-today-checkin-btn.is-checked {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: #34d399;
+    color: #6ee7b7;
+    box-shadow: 0 0 14px rgba(16, 185, 129, 0.2);
+}
+
+.calendar-nav-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.calendar-month-title {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    min-width: 115px;
+    text-align: center;
+}
+
+.study-calendar-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    margin-bottom: 8px;
+    text-align: center;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.study-calendar-weekdays .weekend {
+    color: #f472b6;
+}
+
+.study-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+}
+
+@media (max-width: 760px) {
+    .study-calendar-grid {
+        gap: 5px;
+    }
+}
+
+.study-cal-cell {
+    min-height: 92px;
+    background: rgba(12, 14, 34, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    user-select: none;
+}
+
+.study-cal-cell.empty-cell {
+    background: rgba(255, 255, 255, 0.015);
+    border-color: transparent;
+    cursor: default;
+    min-height: 60px;
+}
+
+.study-cal-cell:not(.empty-cell):hover {
+    border-color: rgba(56, 189, 248, 0.55);
+    background: rgba(30, 41, 82, 0.55);
+    transform: translateY(-2px);
+}
+
+.study-cal-cell.is-today {
+    border-color: #00f3ff;
+    box-shadow: 0 0 14px rgba(0, 243, 255, 0.18);
+}
+
+.study-cal-cell.is-goal-ready {
+    border-color: rgba(251, 191, 36, 0.75);
+    background: linear-gradient(145deg, rgba(120, 53, 15, 0.35), rgba(15, 23, 42, 0.85));
+    box-shadow: 0 0 18px rgba(251, 191, 36, 0.25);
+}
+
+.study-cal-cell.is-checked-in {
+    background: linear-gradient(145deg, rgba(6, 78, 59, 0.68), rgba(16, 185, 129, 0.22));
+    border-color: #34d399;
+    box-shadow: 0 4px 18px rgba(16, 185, 129, 0.25), inset 0 0 15px rgba(52, 211, 153, 0.12);
+}
+
+.cal-cell-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 4px;
+}
+
+.cal-day-number {
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.cal-today-tag {
+    font-size: 0.64rem;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgba(0, 243, 255, 0.2);
+    color: #00f3ff;
+    border: 1px solid rgba(0, 243, 255, 0.4);
+}
+
+.cal-cell-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 4px 0;
+}
+
+.cal-check-stamp {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 8px;
+    background: rgba(16, 185, 129, 0.28);
+    border: 1px solid rgba(74, 222, 128, 0.65);
+    color: #6ee7b7;
+    font-size: 0.76rem;
+    font-weight: 900;
+    animation: calCheckPop 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+@keyframes calCheckPop {
+    0% { transform: scale(0.5); opacity: 0; }
+    80% { transform: scale(1.1); }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.cal-ready-hint {
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #fde68a;
+    background: rgba(245, 158, 11, 0.22);
+    border: 1px dashed rgba(251, 191, 36, 0.65);
+    padding: 3px 7px;
+    border-radius: 6px;
+    text-align: center;
+}
+
+.cal-uncheck-hint {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.22);
+    font-weight: 600;
+    transition: color 0.15s ease;
+}
+
+.study-cal-cell:hover .cal-uncheck-hint {
+    color: #38bdf8;
+}
+
+.cal-cell-bottom {
+    display: flex;
+    justify-content: center;
+}
+
+.cal-pomo-pill {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #cbd5e1;
+    background: rgba(255, 255, 255, 0.07);
+    padding: 2px 7px;
+    border-radius: 999px;
+}
+
+.cal-pomo-pill.completed {
+    color: #fde68a;
+    background: rgba(245, 158, 11, 0.22);
+    border: 1px solid rgba(251, 191, 36, 0.45);
+}
+
+/* Weekly plan card enhancements */
+.day-card.active-plan-day {
+    border-color: #38bdf8 !important;
+    box-shadow: 0 0 18px rgba(56, 189, 248, 0.22);
+}
+
+.day-card.checked-in-day {
+    border-color: rgba(52, 211, 153, 0.55);
+}
+
+.day-subject-item.day-subj-done {
+    color: #6ee7b7;
+}

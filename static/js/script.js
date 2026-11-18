@@ -905,42 +905,69 @@ function renderSuggestions(suggestions) {
 // --- Weekly Plan ---
 function renderWeeklyPlan(weekly) {
     const grid = document.getElementById("weekly-grid");
+    if (!grid || !Array.isArray(weekly)) return;
     grid.innerHTML = "";
+
+    const todayISO = getLocalDateISO();
+    const todayWeekday = getWeekdayNameFromISO(todayISO);
 
     weekly.forEach((day, i) => {
         const totalHours = day.subjects.reduce((sum, s) => sum + s.hours, 0);
         const totalPomos = day.subjects.reduce((sum, s) => sum + (s.pomodoros || Math.max(1, Math.ceil((s.hours * 60) / flowTimerState.focusDuration))), 0);
-        
+
         let intensityClass = "intensity-low";
         if (totalHours > 8) intensityClass = "intensity-max";
         else if (totalHours > 5) intensityClass = "intensity-high";
         else if (totalHours > 3) intensityClass = "intensity-medium";
 
+        const isTodayDynamic = day.date ? day.date === todayISO : day.day === todayWeekday;
+        const isSelectedDay = day.date
+            ? day.date === flowTimerState.activeDateStr
+            : day.day === getWeekdayNameFromISO(flowTimerState.activeDateStr);
+        const rec = day.date ? flowTimerState.dailyRecords[day.date] : null;
+        const isCheckedIn = Boolean(rec && rec.checkedIn);
+        const zhDay = WEEKDAY_ZH_SHORT[day.day] || day.day;
+        const dateLabel = day.date ? formatMonthDaySlash(day.date) : "";
+
         const card = document.createElement("div");
-        card.className = `day-card ${day.is_today ? "today" : ""} ${intensityClass}`;
+        card.className = `day-card ${isTodayDynamic ? "today" : ""} ${isSelectedDay ? "active-plan-day" : ""} ${isCheckedIn ? "checked-in-day" : ""} ${intensityClass}`;
         card.style.animationDelay = `${i * 0.06}s`;
+        card.style.cursor = "pointer";
+        card.title = `點擊切換至 ${zhDay} (${dateLabel}) 的番茄鐘課表`;
 
         let subjectsHtml = "";
-        day.subjects.forEach(s => {
+        day.subjects.forEach((s, idx) => {
             const pCount = s.pomodoros || Math.max(1, Math.ceil((s.hours * 60) / flowTimerState.focusDuration));
+            const doneCount = rec && rec.subjectsMap && typeof rec.subjectsMap[s.name] === "number" ? rec.subjectsMap[s.name] : 0;
+            const subjDone = doneCount >= pCount;
             subjectsHtml += `
-                <div class="day-subject-item">
-                    <span class="day-subject-name">${escapeHtml(s.name)}</span>
-                    <span class="day-subject-hours">${s.hours}h (🍅${pCount})</span>
+                <div class="day-subject-item ${subjDone ? "day-subj-done" : ""}">
+                    <span class="day-subject-name">${idx === 0 ? "⭐ " : ""}${escapeHtml(s.name)}</span>
+                    <span class="day-subject-hours">${s.hours}h (🍅${doneCount}/${pCount})</span>
                 </div>
             `;
         });
 
         card.innerHTML = `
             <div class="day-name">
-                ${day.day}
-                ${day.is_today ? '<span class="today-badge">TODAY</span>' : ""}
+                <span>${zhDay} ${escapeHtml(day.day)} ${dateLabel ? `<small style="opacity:0.75;">(${dateLabel})</small>` : ""}</span>
+                <span style="display:flex; gap:4px; align-items:center;">
+                    ${isCheckedIn ? '<span class="today-badge" style="background:rgba(16,185,129,0.25);color:#6ee7b7;border-color:#34d399;">✅ 已完成</span>' : ""}
+                    ${isTodayDynamic ? '<span class="today-badge">TODAY</span>' : ""}
+                </span>
             </div>
             <div class="day-subjects">${subjectsHtml}</div>
-            <div class="day-footer" style="margin-top: 10px; font-size: 0.75rem; color: var(--text-muted); text-align: right;">
-                Total: ${totalHours.toFixed(1)}h · 🍅 ${totalPomos} 顆
+            <div class="day-footer" style="margin-top: 10px; font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center;">
+                <span style="color:#38bdf8;">${isSelectedDay ? "🎯 目前顯示中" : "點擊切換此日 👉"}</span>
+                <span>Total: ${totalHours.toFixed(1)}h · 🍅 ${totalPomos} 顆</span>
             </div>
         `;
+
+        card.addEventListener("click", () => {
+            if (day.date) {
+                switchActiveScheduleDate(day.date);
+            }
+        });
 
         grid.appendChild(card);
     });
@@ -1218,6 +1245,48 @@ const FLOW_SESSION_LABELS = {
     longBreak: "🌙 長休息",
 };
 
+const WEEKDAY_EN_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const WEEKDAY_ZH_SHORT = {
+    Monday: "週一",
+    Tuesday: "週二",
+    Wednesday: "週三",
+    Thursday: "週四",
+    Friday: "週五",
+    Saturday: "週六",
+    Sunday: "週日",
+};
+
+function getLocalDateISO(dateObj = new Date()) {
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const d = String(dateObj.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
+
+function parseLocalDateISO(isoStr) {
+    if (!isoStr || typeof isoStr !== "string") return new Date();
+    const parts = isoStr.split("-").map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return new Date();
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+}
+
+function getWeekdayNameFromISO(isoStr) {
+    const d = parseLocalDateISO(isoStr);
+    return WEEKDAY_EN_NAMES[d.getDay()];
+}
+
+function formatMonthDaySlash(isoStr) {
+    const d = parseLocalDateISO(isoStr);
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function formatMonthDayZh(isoStr) {
+    const d = parseLocalDateISO(isoStr);
+    const wd = WEEKDAY_ZH_SHORT[WEEKDAY_EN_NAMES[d.getDay()]] || "";
+    return `${d.getMonth() + 1}月${d.getDate()}日 (${wd})`;
+}
+
+const _initNow = new Date();
 const flowTimerState = {
     isRunning: false,
     sessionType: "focus", // 'focus' | 'shortBreak' | 'longBreak'
@@ -1233,6 +1302,11 @@ const flowTimerState = {
     soundEnabled: true,
     activeSubjectIndex: 0,
     subjectsProgress: [], // [{ name, priority_level, allocated_hours, targetPomodoros, completedPomodoros }]
+    activeDateStr: getLocalDateISO(_initNow), // Currently viewed/active date (YYYY-MM-DD)
+    lastActiveDateStr: "", // Last saved date for subjectsProgress rollover detection
+    dailyRecords: {}, // { 'YYYY-MM-DD': { checkedIn: bool, completedPomodoros: int, targetPomodoros: int, subjectsMap: { [name]: int } } }
+    calendarViewYear: _initNow.getFullYear(),
+    calendarViewMonth: _initNow.getMonth(), // 0-11
     tickHandle: null,
     targetEndMs: null,
     isIntroCountingDown: false,
@@ -1279,6 +1353,12 @@ const flowTimerState = {
             if (Array.isArray(rParsed.redemptionHistory)) {
                 flowTimerState.redemptionHistory = rParsed.redemptionHistory;
             }
+            if (rParsed.dailyRecords && typeof rParsed.dailyRecords === "object") {
+                flowTimerState.dailyRecords = rParsed.dailyRecords;
+            }
+            if (typeof rParsed.lastActiveDateStr === "string") {
+                flowTimerState.lastActiveDateStr = rParsed.lastActiveDateStr;
+            }
         }
     } catch (e) {
         console.warn("Failed to load Flow-OS settings:", e);
@@ -1309,6 +1389,8 @@ function saveRewardShopState() {
             subjectsProgress: flowTimerState.subjectsProgress,
             activeSubjectIndex: flowTimerState.activeSubjectIndex,
             sessionsCompleted: flowTimerState.sessionsCompleted,
+            lastActiveDateStr: flowTimerState.lastActiveDateStr || flowTimerState.activeDateStr,
+            dailyRecords: flowTimerState.dailyRecords,
         }));
     } catch (e) {
         console.warn("Failed to save Reward Shop state:", e);
@@ -1347,6 +1429,8 @@ function syncFlowStateToBackend() {
                     subjectsProgress: flowTimerState.subjectsProgress,
                     activeSubjectIndex: flowTimerState.activeSubjectIndex,
                     sessionsCompleted: flowTimerState.sessionsCompleted,
+                    lastActiveDateStr: flowTimerState.lastActiveDateStr || flowTimerState.activeDateStr,
+                    dailyRecords: flowTimerState.dailyRecords,
                 },
             }),
         }).catch(() => {});
@@ -2025,8 +2109,13 @@ function completeFlowSession() {
                     flowTimerState.activeSubjectIndex = nextIdx;
                 }
             }
+            syncActiveDateProgressToRecord(true);
             saveRewardShopState();
             renderFlowSubjectsList();
+            renderStudyCheckinCalendar();
+            if (currentPlanData && currentPlanData.weekly_plan) {
+                renderWeeklyPlan(currentPlanData.weekly_plan);
+            }
         }
 
         const nextType = flowTimerState.sessionsCompleted % 4 === 0 ? "longBreak" : "shortBreak";
@@ -2728,33 +2817,472 @@ function renderRewardShop() {
     }
 }
 
-// --- Initialize & Render Daily Subject Pomodoro List ---
-function initFlowOSWithPlan(plan, isRestoring = false) {
-    const ranking = plan.priority_ranking || [];
-    const existingMap = {};
-    if (isRestoring && Array.isArray(flowTimerState.subjectsProgress)) {
-        flowTimerState.subjectsProgress.forEach(p => {
-            existingMap[p.name] = p.completedPomodoros || 0;
-        });
+// --- Daily Rollover, 7-Day Schedule Switcher & Monthly Study Check-in Calendar ---
+
+function getOrderedSubjectsForDate(plan, dateStr) {
+    const ranking = (plan && plan.priority_ranking) || [];
+    if (!plan || !Array.isArray(plan.weekly_plan) || plan.weekly_plan.length === 0) {
+        return ranking;
     }
 
-    flowTimerState.subjectsProgress = ranking.map(s => {
-        const target = s.pomodoros || Math.max(1, Math.ceil((s.allocated_hours * 60) / flowTimerState.focusDuration));
+    const weekdayEn = getWeekdayNameFromISO(dateStr);
+    const matchedDay =
+        plan.weekly_plan.find(d => d.date === dateStr) ||
+        plan.weekly_plan.find(d => d.day === weekdayEn);
+
+    if (!matchedDay || !Array.isArray(matchedDay.subjects) || matchedDay.subjects.length === 0) {
+        return ranking;
+    }
+
+    const rankingMap = {};
+    ranking.forEach(s => {
+        rankingMap[s.name] = s;
+    });
+
+    const ordered = [];
+    matchedDay.subjects.forEach(ds => {
+        if (rankingMap[ds.name]) {
+            ordered.push(rankingMap[ds.name]);
+        } else {
+            ordered.push({
+                name: ds.name,
+                priority_level: ds.priority_level || "Medium",
+                allocated_hours: ds.hours || 1,
+                pomodoros: ds.pomodoros,
+            });
+        }
+    });
+
+    // Append any subject in ranking that wasn't in matchedDay
+    ranking.forEach(s => {
+        if (!ordered.some(o => o.name === s.name)) {
+            ordered.push(s);
+        }
+    });
+
+    return ordered;
+}
+
+function syncActiveDateProgressToRecord(autoCheckinIfDone = false) {
+    const dateStr = flowTimerState.activeDateStr || getLocalDateISO();
+    if (!flowTimerState.dailyRecords || typeof flowTimerState.dailyRecords !== "object") {
+        flowTimerState.dailyRecords = {};
+    }
+
+    const existing = flowTimerState.dailyRecords[dateStr] || {
+        checkedIn: false,
+        completedPomodoros: 0,
+        targetPomodoros: 0,
+        subjectsMap: {},
+    };
+
+    const subjectsMap = { ...(existing.subjectsMap || {}) };
+    let totalTarget = 0;
+    let totalCompleted = 0;
+
+    flowTimerState.subjectsProgress.forEach(s => {
+        subjectsMap[s.name] = s.completedPomodoros || 0;
+        totalTarget += s.targetPomodoros || 0;
+        totalCompleted += s.completedPomodoros || 0;
+    });
+
+    const wasCheckedIn = Boolean(existing.checkedIn);
+    let nowCheckedIn = wasCheckedIn;
+    if (autoCheckinIfDone && totalTarget > 0 && totalCompleted >= totalTarget) {
+        nowCheckedIn = true;
+    }
+
+    flowTimerState.dailyRecords[dateStr] = {
+        checkedIn: nowCheckedIn,
+        completedPomodoros: totalCompleted,
+        targetPomodoros: totalTarget,
+        subjectsMap: subjectsMap,
+        updatedAt: new Date().toISOString(),
+    };
+
+    flowTimerState.lastActiveDateStr = dateStr;
+
+    if (!wasCheckedIn && nowCheckedIn) {
+        playFlowConfetti();
+        showFlowNotice(`🎉 太棒了！${formatMonthDayZh(dateStr)} 的番茄鐘已 100% 全部完成，已自動在月曆打勾 ✅！`, 7000);
+    }
+}
+
+function loadSubjectsProgressForDate(plan, dateStr) {
+    if (!plan) return;
+    const orderedSubjects = getOrderedSubjectsForDate(plan, dateStr);
+    const dayRecord = (flowTimerState.dailyRecords && flowTimerState.dailyRecords[dateStr]) || null;
+    const savedMap = (dayRecord && dayRecord.subjectsMap) || {};
+
+    flowTimerState.subjectsProgress = orderedSubjects.map(s => {
+        const target = Math.max(1, Math.ceil((s.allocated_hours * 60) / flowTimerState.focusDuration));
+        const completed = typeof savedMap[s.name] === "number" ? savedMap[s.name] : 0;
         return {
             name: s.name,
-            priority_level: s.priority_level,
+            priority_level: s.priority_level || "Medium",
             allocated_hours: s.allocated_hours,
             targetPomodoros: target,
-            completedPomodoros: isRestoring && existingMap[s.name] !== undefined ? existingMap[s.name] : 0,
+            completedPomodoros: completed,
         };
     });
-    if (!isRestoring) {
-        flowTimerState.activeSubjectIndex = 0;
+
+    // Pick first unfinished subject as activeSubjectIndex
+    const firstUnfinished = flowTimerState.subjectsProgress.findIndex(
+        s => s.completedPomodoros < s.targetPomodoros
+    );
+    flowTimerState.activeSubjectIndex = firstUnfinished !== -1 ? firstUnfinished : 0;
+
+    syncActiveDateProgressToRecord(false);
+}
+
+function switchActiveScheduleDate(dateStr) {
+    if (!dateStr) return;
+    flowTimerState.activeDateStr = dateStr;
+
+    if (currentPlanData) {
+        loadSubjectsProgressForDate(currentPlanData, dateStr);
+
+        // Also update Daily Timetable if Weekly Plan has a timetable for this day
+        const weekdayEn = getWeekdayNameFromISO(dateStr);
+        const matchedDay =
+            (currentPlanData.weekly_plan || []).find(d => d.date === dateStr) ||
+            (currentPlanData.weekly_plan || []).find(d => d.day === weekdayEn);
+        if (matchedDay && Array.isArray(matchedDay.timetable)) {
+            renderTimetable(matchedDay.timetable);
+        }
+        if (currentPlanData.weekly_plan) {
+            renderWeeklyPlan(currentPlanData.weekly_plan);
+        }
     }
 
     renderFlowSubjectsList();
-    renderRewardShop();
+    renderStudyCheckinCalendar();
     updateFlowTimerUI();
+    saveRewardShopState();
+}
+
+function checkAndRolloverNewDay() {
+    const todayISO = getLocalDateISO();
+    if (flowTimerState.lastActiveDateStr && flowTimerState.lastActiveDateStr !== todayISO) {
+        const prevDate = flowTimerState.lastActiveDateStr;
+        flowTimerState.activeDateStr = todayISO;
+        flowTimerState.lastActiveDateStr = todayISO;
+        if (currentPlanData) {
+            loadSubjectsProgressForDate(currentPlanData, todayISO);
+            if (currentPlanData.weekly_plan) {
+                renderWeeklyPlan(currentPlanData.weekly_plan);
+            }
+        }
+        renderFlowSubjectsList();
+        renderStudyCheckinCalendar();
+        updateFlowTimerUI();
+        saveRewardShopState();
+        showFlowNotice(
+            `🌅 新的一天開始了！已封存 ${formatMonthDaySlash(prevDate)} 紀錄，並自動切換至今日 ${formatMonthDayZh(todayISO)} 的輪轉番茄鐘課表！`,
+            8000
+        );
+    }
+}
+
+function toggleDateCheckin(dateStr, forceState = null) {
+    if (!dateStr) return;
+    if (!flowTimerState.dailyRecords || typeof flowTimerState.dailyRecords !== "object") {
+        flowTimerState.dailyRecords = {};
+    }
+
+    const totalTargetDefault = flowTimerState.subjectsProgress.reduce((sum, s) => sum + (s.targetPomodoros || 0), 0);
+    const existing = flowTimerState.dailyRecords[dateStr] || {
+        checkedIn: false,
+        completedPomodoros: 0,
+        targetPomodoros: totalTargetDefault,
+        subjectsMap: {},
+    };
+
+    const nextChecked = forceState !== null ? Boolean(forceState) : !existing.checkedIn;
+    existing.checkedIn = nextChecked;
+    if (nextChecked && existing.targetPomodoros === 0 && totalTargetDefault > 0) {
+        existing.targetPomodoros = totalTargetDefault;
+    }
+    existing.updatedAt = new Date().toISOString();
+    flowTimerState.dailyRecords[dateStr] = existing;
+
+    if (nextChecked) {
+        playMarioCoinSound(true);
+        playFlowConfetti();
+        showFlowNotice(`✅ 太棒了！已在 ${formatMonthDayZh(dateStr)} 蓋上「已完成」勾勾印記！今天超棒！`, 6000);
+    } else {
+        showFlowNotice(`已取消 ${formatMonthDayZh(dateStr)} 的完成勾勾標記。`, 3500);
+    }
+
+    saveRewardShopState();
+    renderFlowSubjectsList();
+    renderStudyCheckinCalendar();
+    if (currentPlanData && currentPlanData.weekly_plan) {
+        renderWeeklyPlan(currentPlanData.weekly_plan);
+    }
+}
+
+function getWeekDatesMonToSun(referenceISO) {
+    const refDate = parseLocalDateISO(referenceISO);
+    const dayOfWeek = refDate.getDay(); // 0 (Sun) .. 6 (Sat)
+    const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate() + diffToMon);
+
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+        const iso = getLocalDateISO(d);
+        const enName = WEEKDAY_EN_NAMES[d.getDay()];
+        days.push({
+            iso,
+            enName,
+            zhName: WEEKDAY_ZH_SHORT[enName],
+            slashDate: `${d.getMonth() + 1}/${d.getDate()}`,
+        });
+    }
+    return days;
+}
+
+function renderWeekdaySwitcherTabs() {
+    const switcher = document.getElementById("flow-weekday-switcher");
+    if (!switcher) return;
+
+    const todayISO = getLocalDateISO();
+    const activeISO = flowTimerState.activeDateStr || todayISO;
+    const weekDays = getWeekDatesMonToSun(activeISO);
+
+    switcher.innerHTML = "";
+    weekDays.forEach(d => {
+        const isActive = d.iso === activeISO;
+        const isToday = d.iso === todayISO;
+        const rec = flowTimerState.dailyRecords && flowTimerState.dailyRecords[d.iso];
+        const isChecked = Boolean(rec && rec.checkedIn);
+        const doneCount = rec ? rec.completedPomodoros || 0 : 0;
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `flow-weekday-tab ${isActive ? "active" : ""} ${isToday ? "is-today" : ""} ${isChecked ? "is-checked" : ""}`;
+        btn.setAttribute("role", "tab");
+        btn.setAttribute("aria-selected", String(isActive));
+
+        let statusBadge = "";
+        if (isChecked) {
+            statusBadge = `<span class="wd-status-icon checked">✅</span>`;
+        } else if (doneCount > 0) {
+            statusBadge = `<span class="wd-status-icon progress">🍅${doneCount}</span>`;
+        }
+
+        btn.innerHTML = `
+            <span class="wd-top-row">
+                <span class="wd-zh">${d.zhName}</span>
+                ${isToday ? '<span class="wd-today-dot">今日</span>' : ""}
+                ${statusBadge}
+            </span>
+            <span class="wd-date">${d.slashDate}</span>
+        `;
+
+        btn.addEventListener("click", () => {
+            switchActiveScheduleDate(d.iso);
+        });
+
+        switcher.appendChild(btn);
+    });
+}
+
+function calculateStudyStreak() {
+    const records = flowTimerState.dailyRecords || {};
+    const todayISO = getLocalDateISO();
+    let streak = 0;
+    let cursor = parseLocalDateISO(todayISO);
+
+    // If today isn't checked in yet, check if yesterday was checked in to count active streak
+    const todayRec = records[todayISO];
+    if (!todayRec || !todayRec.checkedIn) {
+        const yesterday = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() - 1);
+        const yISO = getLocalDateISO(yesterday);
+        if (records[yISO] && records[yISO].checkedIn) {
+            cursor = yesterday;
+        } else {
+            return 0;
+        }
+    }
+
+    while (true) {
+        const iso = getLocalDateISO(cursor);
+        const r = records[iso];
+        if (r && r.checkedIn) {
+            streak += 1;
+            cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() - 1);
+        } else {
+            break;
+        }
+    }
+    return streak;
+}
+
+function renderStudyCheckinCalendar() {
+    const grid = document.getElementById("study-calendar-grid");
+    const monthTitleEl = document.getElementById("calendar-month-title");
+    const streakBadgeEl = document.getElementById("calendar-streak-badge");
+    const monthCountBadgeEl = document.getElementById("calendar-month-count-badge");
+    const heroCheckinBtn = document.getElementById("calendar-hero-checkin-btn");
+
+    if (!grid) return;
+
+    const year = flowTimerState.calendarViewYear;
+    const month = flowTimerState.calendarViewMonth; // 0-11
+    const todayISO = getLocalDateISO();
+    const activeISO = flowTimerState.activeDateStr || todayISO;
+    const todaySlash = formatMonthDaySlash(todayISO);
+
+    if (monthTitleEl) {
+        monthTitleEl.textContent = `${year} 年 ${month + 1} 月`;
+    }
+
+    // Hero check-in button: prioritize 2026-11-16 if it has completed pomodoros and isn't checked in yet, otherwise activeDateStr / todayISO
+    const nov16Rec = flowTimerState.dailyRecords && flowTimerState.dailyRecords["2026-11-16"];
+    const targetHeroISO =
+        nov16Rec && !nov16Rec.checkedIn && (nov16Rec.completedPomodoros || 0) > 0
+            ? "2026-11-16"
+            : activeISO || todayISO;
+    const targetHeroSlash = formatMonthDaySlash(targetHeroISO);
+
+    if (heroCheckinBtn) {
+        heroCheckinBtn.setAttribute("data-target-date", targetHeroISO);
+        const heroRec = flowTimerState.dailyRecords && flowTimerState.dailyRecords[targetHeroISO];
+        const isHeroChecked = Boolean(heroRec && heroRec.checkedIn);
+        if (isHeroChecked) {
+            heroCheckinBtn.textContent = `🌟 ${targetHeroSlash} 已打勾完成！你超棒！（點擊可取消）`;
+            heroCheckinBtn.classList.add("is-checked");
+        } else {
+            heroCheckinBtn.textContent = `✅ 點我打勾 ${targetHeroSlash}（我很棒有完成！）`;
+            heroCheckinBtn.classList.remove("is-checked");
+        }
+    }
+
+    const firstDayOfMonth = new Date(year, month, 1);
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    // Monday-based index: Mon=0, Tue=1, ..., Sun=6
+    const startWeekdayMon0 = (firstDayOfMonth.getDay() + 6) % 7;
+
+    grid.innerHTML = "";
+
+    // Leading empty cells from previous month
+    for (let i = 0; i < startWeekdayMon0; i++) {
+        const emptyCell = document.createElement("div");
+        emptyCell.className = "study-cal-cell empty-cell";
+        grid.appendChild(emptyCell);
+    }
+
+    let monthCheckedCount = 0;
+
+    for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
+        const cellDate = new Date(year, month, dayNum);
+        const iso = getLocalDateISO(cellDate);
+        const isToday = iso === todayISO;
+        const isActive = iso === activeISO;
+        const rec = (flowTimerState.dailyRecords && flowTimerState.dailyRecords[iso]) || null;
+        const isChecked = Boolean(rec && rec.checkedIn);
+        const donePomos = rec ? rec.completedPomodoros || 0 : 0;
+        const targetPomos = rec ? rec.targetPomodoros || 0 : 0;
+
+        if (isChecked) {
+            monthCheckedCount += 1;
+        }
+
+        const isGoalReachedUnchecked = !isChecked && targetPomos > 0 && donePomos >= targetPomos;
+
+        const cell = document.createElement("div");
+        cell.className = `study-cal-cell ${isToday ? "is-today" : ""} ${isActive ? "is-active-schedule" : ""} ${isChecked ? "is-checked-in" : ""} ${isGoalReachedUnchecked ? "is-goal-ready" : ""}`;
+        cell.setAttribute("data-date", iso);
+        cell.title = isChecked
+            ? `${month + 1}/${dayNum} 已完成打卡！（點擊可切換狀態）`
+            : `點擊為 ${month + 1}月${dayNum}日 打勾打卡 ✅`;
+
+        let pomoTagHtml = "";
+        if (donePomos > 0) {
+            pomoTagHtml = `<div class="cal-pomo-pill ${donePomos >= targetPomos && targetPomos > 0 ? "completed" : ""}">🍅 ${donePomos}${targetPomos > 0 ? `/${targetPomos}` : ""} 顆</div>`;
+        } else if (isChecked) {
+            pomoTagHtml = `<div class="cal-pomo-pill completed">🍅 目標達成</div>`;
+        }
+
+        cell.innerHTML = `
+            <div class="cal-cell-top">
+                <span class="cal-day-number">${month + 1}/${dayNum}</span>
+                ${isToday ? '<span class="cal-today-tag">今日</span>' : ""}
+            </div>
+            <div class="cal-cell-center">
+                ${
+                    isChecked
+                        ? `<div class="cal-check-stamp">
+                               <span class="cal-check-icon">✅</span>
+                               <span class="cal-check-text">很棒完成！</span>
+                           </div>`
+                        : isGoalReachedUnchecked
+                        ? `<div class="cal-ready-hint">🎉 已達標！點我打勾</div>`
+                        : `<div class="cal-uncheck-hint">＋ 點擊打勾</div>`
+                }
+            </div>
+            <div class="cal-cell-bottom">
+                ${pomoTagHtml}
+            </div>
+        `;
+
+        cell.addEventListener("click", () => {
+            toggleDateCheckin(iso);
+        });
+
+        grid.appendChild(cell);
+    }
+
+    const streak = calculateStudyStreak();
+    if (streakBadgeEl) {
+        streakBadgeEl.innerHTML = `🔥 連續打卡：<strong>${streak} 天</strong>`;
+    }
+    if (monthCountBadgeEl) {
+        monthCountBadgeEl.innerHTML = `✅ 本月完成：<strong>${monthCheckedCount} 天</strong>`;
+    }
+}
+
+// --- Initialize & Render Daily Subject Pomodoro List ---
+function initFlowOSWithPlan(plan, isRestoring = false) {
+    const todayISO = getLocalDateISO();
+
+    // Migrate legacy subjectsProgress into dailyRecords if dailyRecords has no entry yet
+    if (isRestoring && Array.isArray(flowTimerState.subjectsProgress) && flowTimerState.subjectsProgress.length > 0) {
+        const recordDate = flowTimerState.lastActiveDateStr || todayISO;
+        if (!flowTimerState.dailyRecords || typeof flowTimerState.dailyRecords !== "object") {
+            flowTimerState.dailyRecords = {};
+        }
+        if (!flowTimerState.dailyRecords[recordDate]) {
+            const subjectsMap = {};
+            let totalDone = 0;
+            let totalTarget = 0;
+            flowTimerState.subjectsProgress.forEach(p => {
+                subjectsMap[p.name] = p.completedPomodoros || 0;
+                totalDone += p.completedPomodoros || 0;
+                totalTarget += p.targetPomodoros || 0;
+            });
+            flowTimerState.dailyRecords[recordDate] = {
+                checkedIn: totalTarget > 0 && totalDone >= totalTarget,
+                completedPomodoros: totalDone,
+                targetPomodoros: totalTarget,
+                subjectsMap: subjectsMap,
+                updatedAt: new Date().toISOString(),
+            };
+        }
+    }
+
+    // Automatic rollover to today's schedule when opening on a new day
+    flowTimerState.activeDateStr = todayISO;
+    flowTimerState.lastActiveDateStr = todayISO;
+
+    loadSubjectsProgressForDate(plan, todayISO);
+    renderFlowSubjectsList();
+    renderRewardShop();
+    renderStudyCheckinCalendar();
+    updateFlowTimerUI();
+    saveRewardShopState();
 }
 
 function recalculateSubjectsPomodoros() {
@@ -2765,9 +3293,11 @@ function recalculateSubjectsPomodoros() {
     currentPlanData.priority_ranking.forEach(s => {
         s.pomodoros = Math.max(1, Math.ceil((s.allocated_hours * 60) / flowTimerState.focusDuration));
     });
+    syncActiveDateProgressToRecord(false);
     renderFlowSubjectsList();
     renderPriorityTable(currentPlanData.priority_ranking);
     renderWeeklyPlan(currentPlanData.weekly_plan);
+    renderStudyCheckinCalendar();
     updateFlowTimerUI();
     saveRewardShopState();
 }
@@ -2777,16 +3307,70 @@ function renderFlowSubjectsList() {
     const totalBadge = document.getElementById("flow-total-pomodoros-badge");
     const overallText = document.getElementById("flow-overall-progress-text");
     const overallFill = document.getElementById("flow-overall-bar-fill");
+    const panelTitleEl = document.getElementById("flow-daily-panel-title");
+    const rolloverHintEl = document.getElementById("flow-day-rollover-hint");
+    const checkinBarEl = document.getElementById("flow-daily-checkin-bar");
+    const checkinIconEl = document.getElementById("flow-checkin-status-icon");
+    const checkinTextEl = document.getElementById("flow-checkin-status-text");
+    const quickCheckinBtn = document.getElementById("flow-quick-checkin-btn");
+
+    renderWeekdaySwitcherTabs();
 
     if (!container) return;
     container.innerHTML = "";
+
+    const todayISO = getLocalDateISO();
+    const activeISO = flowTimerState.activeDateStr || todayISO;
+    const isViewingToday = activeISO === todayISO;
+    const activeDateZh = formatMonthDayZh(activeISO);
+    const activeSlash = formatMonthDaySlash(activeISO);
+
+    // Compute tomorrow's preview info
+    const activeDateObj = parseLocalDateISO(activeISO);
+    const nextDayObj = new Date(activeDateObj.getFullYear(), activeDateObj.getMonth(), activeDateObj.getDate() + 1);
+    const nextDayISO = getLocalDateISO(nextDayObj);
+    const nextDayZh = formatMonthDayZh(nextDayISO);
+    const nextDayFirstSubj =
+        currentPlanData && currentPlanData.priority_ranking
+            ? (getOrderedSubjectsForDate(currentPlanData, nextDayISO)[0] || {}).name || "週二第一科"
+            : "隔日排定科目";
+
+    if (panelTitleEl) {
+        panelTitleEl.textContent = `📋 ${activeDateZh} 各科應完成「番茄鐘顆數」${isViewingToday ? "（今日課表）" : ""}`;
+    }
 
     const totalTarget = flowTimerState.subjectsProgress.reduce((sum, s) => sum + s.targetPomodoros, 0);
     const totalCompleted = flowTimerState.subjectsProgress.reduce((sum, s) => sum + s.completedPomodoros, 0);
     const overallPct = totalTarget > 0 ? Math.min(100, Math.round((totalCompleted / totalTarget) * 100)) : 0;
 
+    if (rolloverHintEl) {
+        if (totalTarget > 0 && totalCompleted >= totalTarget) {
+            rolloverHintEl.innerHTML = `✨ <strong>${activeDateZh} 番茄鐘已全數達標！</strong> 明天（<strong>${nextDayZh}</strong>）打開將自動從「<strong>${escapeHtml(nextDayFirstSubj)}</strong>」開始新的一天！`;
+        } else {
+            rolloverHintEl.innerHTML = `📅 目前顯示 <strong>${activeDateZh}</strong> 課表；跨日進入 <strong>${nextDayZh}</strong> 時，將自動切換至隔日輪轉科目（首科：<strong>${escapeHtml(nextDayFirstSubj)}</strong>）`;
+        }
+    }
+
+    const dayRec = flowTimerState.dailyRecords && flowTimerState.dailyRecords[activeISO];
+    const isDateCheckedIn = Boolean(dayRec && dayRec.checkedIn);
+
+    if (checkinBarEl && checkinIconEl && checkinTextEl && quickCheckinBtn) {
+        checkinBarEl.classList.toggle("is-checked-in", isDateCheckedIn);
+        if (isDateCheckedIn) {
+            checkinIconEl.textContent = "✅";
+            checkinTextEl.innerHTML = `<strong>${activeDateZh} 已在月曆打勾完成！</strong> 你今天超棒！明天會自動從 ${nextDayZh} 的番茄鐘開始！`;
+            quickCheckinBtn.textContent = `🌟 ${activeSlash} 已完成打卡`;
+            quickCheckinBtn.classList.add("checked");
+        } else {
+            checkinIconEl.textContent = "🗓️";
+            checkinTextEl.innerHTML = `完成了 <strong>${activeDateZh}</strong> 的讀書進度嗎？點擊右側按鈕在 <strong>${activeSlash}</strong> 月曆打勾犒賞自己！`;
+            quickCheckinBtn.textContent = `✅ 在 ${activeSlash} 月曆打勾`;
+            quickCheckinBtn.classList.remove("checked");
+        }
+    }
+
     if (totalBadge) {
-        totalBadge.textContent = `今日目標：${totalTarget} 顆 🍅（單顆 ${flowTimerState.focusDuration} 分鐘）`;
+        totalBadge.textContent = `${activeSlash} 目標：${totalTarget} 顆 🍅（單顆 ${flowTimerState.focusDuration} 分鐘）`;
     }
     if (overallText) {
         overallText.textContent = `已完成 ${totalCompleted} / ${totalTarget} 顆 (${overallPct}%)`;
@@ -2818,7 +3402,7 @@ function renderFlowSubjectsList() {
             <div class="flow-subj-top">
                 <div class="flow-subj-title-group">
                     <span class="priority-badge ${subj.priority_level.toLowerCase()}">${subj.priority_level}</span>
-                    <strong class="flow-subj-name">${escapeHtml(subj.name)}</strong>
+                    <strong class="flow-subj-name">${idx === 0 ? "⭐ " : ""}${escapeHtml(subj.name)}</strong>
                     <span class="flow-subj-hours">(${subj.allocated_hours}h)</span>
                 </div>
                 <div class="flow-subj-counter">
@@ -2849,17 +3433,23 @@ function renderFlowSubjectsList() {
 
             if (action === "inc") {
                 subj.completedPomodoros += 1;
+                syncActiveDateProgressToRecord(true);
                 const { earned, multiplier, isCombo } = awardPomodoroCoins();
                 const comboTag = isCombo ? `🔥 ${multiplier}x 暴擊！` : "";
                 showFlowNotice(`🪙 叮鈴！完成 1 顆「${subj.name}」番茄鐘，獲得 +$${earned} ${comboTag}`);
             } else if (action === "dec") {
                 subj.completedPomodoros = Math.max(0, subj.completedPomodoros - 1);
+                syncActiveDateProgressToRecord(false);
                 saveRewardShopState();
             } else if (action === "select") {
                 flowTimerState.activeSubjectIndex = idx;
                 saveRewardShopState();
             }
             renderFlowSubjectsList();
+            renderStudyCheckinCalendar();
+            if (currentPlanData && currentPlanData.weekly_plan) {
+                renderWeeklyPlan(currentPlanData.weekly_plan);
+            }
             updateFlowTimerUI();
         });
     });
@@ -2878,6 +3468,12 @@ function applySavedFormAndPlan(studyState, flowState) {
         }
         if (Array.isArray(flowState.redemptionHistory)) {
             flowTimerState.redemptionHistory = flowState.redemptionHistory;
+        }
+        if (flowState.dailyRecords && typeof flowState.dailyRecords === "object") {
+            flowTimerState.dailyRecords = flowState.dailyRecords;
+        }
+        if (typeof flowState.lastActiveDateStr === "string") {
+            flowTimerState.lastActiveDateStr = flowState.lastActiveDateStr;
         }
         if (Array.isArray(flowState.subjectsProgress)) {
             flowTimerState.subjectsProgress = flowState.subjectsProgress;
@@ -2914,6 +3510,7 @@ function applySavedFormAndPlan(studyState, flowState) {
     }
 
     renderRewardShop();
+    renderStudyCheckinCalendar();
     updateFlowTimerUI();
 }
 
@@ -2960,6 +3557,68 @@ document.addEventListener("DOMContentLoaded", () => {
     const rewardClearBtn = document.getElementById("reward-history-clear-btn");
     const pipHeaderBtn = document.getElementById("flow-pip-btn");
     const pipPanelBtn = document.getElementById("flow-pip-panel-btn");
+    const quickCheckinBtn = document.getElementById("flow-quick-checkin-btn");
+    const heroCheckinBtn = document.getElementById("calendar-hero-checkin-btn");
+    const calPrevBtn = document.getElementById("cal-prev-month-btn");
+    const calNextBtn = document.getElementById("cal-next-month-btn");
+    const calTodayBtn = document.getElementById("cal-today-btn");
+
+    if (quickCheckinBtn) {
+        quickCheckinBtn.addEventListener("click", () => {
+            const targetISO = flowTimerState.activeDateStr || getLocalDateISO();
+            toggleDateCheckin(targetISO);
+        });
+    }
+
+    if (heroCheckinBtn) {
+        heroCheckinBtn.addEventListener("click", () => {
+            const targetISO =
+                heroCheckinBtn.getAttribute("data-target-date") ||
+                flowTimerState.activeDateStr ||
+                getLocalDateISO();
+            toggleDateCheckin(targetISO);
+        });
+    }
+
+    if (calPrevBtn) {
+        calPrevBtn.addEventListener("click", () => {
+            flowTimerState.calendarViewMonth -= 1;
+            if (flowTimerState.calendarViewMonth < 0) {
+                flowTimerState.calendarViewMonth = 11;
+                flowTimerState.calendarViewYear -= 1;
+            }
+            renderStudyCheckinCalendar();
+        });
+    }
+
+    if (calNextBtn) {
+        calNextBtn.addEventListener("click", () => {
+            flowTimerState.calendarViewMonth += 1;
+            if (flowTimerState.calendarViewMonth > 11) {
+                flowTimerState.calendarViewMonth = 0;
+                flowTimerState.calendarViewYear += 1;
+            }
+            renderStudyCheckinCalendar();
+        });
+    }
+
+    if (calTodayBtn) {
+        calTodayBtn.addEventListener("click", () => {
+            const now = new Date();
+            flowTimerState.calendarViewYear = now.getFullYear();
+            flowTimerState.calendarViewMonth = now.getMonth();
+            switchActiveScheduleDate(getLocalDateISO(now));
+        });
+    }
+
+    // Periodically check for midnight day rollover (e.g. Monday -> Tuesday)
+    setInterval(() => {
+        checkAndRolloverNewDay();
+    }, 30000);
+
+    window.addEventListener("focus", () => {
+        checkAndRolloverNewDay();
+    });
 
     if (pipHeaderBtn) {
         pipHeaderBtn.addEventListener("click", () => {

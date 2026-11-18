@@ -254,12 +254,35 @@
                     <!-- Column 2: Daily Subject Pomodoro Tracker -->
                     <div class="flow-subjects-panel">
                         <div class="flow-subjects-header">
-                            <h3 class="flow-panel-title">📋 今日各科應完成「番茄鐘顆數」</h3>
+                            <div>
+                                <h3 class="flow-panel-title" id="flow-daily-panel-title">📋 今日各科應完成「番茄鐘顆數」</h3>
+                                <div class="flow-day-Rollover-hint" id="flow-day-rollover-hint">
+                                    📅 自動依日期切換每週輪轉課表（今日完成自動歸檔，明日自動載入隔日進度）
+                                </div>
+                            </div>
                             <div class="flow-overall-progress-text" id="flow-overall-progress-text">已完成 0 / 0 顆 (0%)</div>
                         </div>
+
+                        <!-- 7-Day Schedule Switcher Tabs (週一 ~ 週日) -->
+                        <div class="flow-weekday-switcher" id="flow-weekday-switcher" role="tablist" aria-label="切換星期番茄鐘清單">
+                            <!-- Populated dynamically by script.js -->
+                        </div>
+
                         <div class="flow-overall-bar">
                             <div class="flow-overall-bar-fill" id="flow-overall-bar-fill" style="width: 0%"></div>
                         </div>
+
+                        <!-- Quick Check-in Banner for Active Date -->
+                        <div class="flow-daily-checkin-bar" id="flow-daily-checkin-bar">
+                            <div class="flow-daily-checkin-info">
+                                <span class="flow-checkin-status-icon" id="flow-checkin-status-icon">⬜</span>
+                                <span id="flow-checkin-status-text">完成今日番茄鐘後，別忘了在月曆打勾鼓勵自己！</span>
+                            </div>
+                            <button type="button" class="flow-checkin-action-btn" id="flow-quick-checkin-btn">
+                                ✅ 在 11/16 月曆打勾
+                            </button>
+                        </div>
+
                         <div class="flow-subject-pomodoro-list" id="flow-subject-pomodoro-list">
                             <!-- Populated dynamically by script.js -->
                         </div>
@@ -304,6 +327,48 @@
                             </div>
                         </div>
                     </aside>
+                </div>
+            </div>
+
+            <!-- Monthly Study Check-in Calendar (每日完成打勾月曆) -->
+            <div class="card result-card full-width" id="checkin-calendar-card" style="--card-index: 0.5">
+                <div class="card-header calendar-card-header">
+                    <div>
+                        <div class="flow-badge-row">
+                            <span class="calendar-brand-badge">🗓️ 每日成就打卡紀錄</span>
+                            <span class="calendar-stat-pill" id="calendar-streak-badge">🔥 連續打卡：<strong>0 天</strong></span>
+                            <span class="calendar-stat-pill" id="calendar-month-count-badge">✅ 本月完成：<strong>0 天</strong></span>
+                        </div>
+                        <h2 class="card-title">📅 讀書完成打卡月曆（Study Check-in Calendar）</h2>
+                        <p class="card-description">點擊日期格子（例如 <strong>11月16日</strong>）即可蓋上「✅ 已完成」勾勾印記！當日番茄鐘 100% 達標時也會自動為你打勾！</p>
+                    </div>
+                    <div class="calendar-header-controls">
+                        <button type="button" class="calendar-today-checkin-btn" id="calendar-hero-checkin-btn">
+                            ✅ 點我打勾今天（11/16 我超棒！）
+                        </button>
+                        <div class="calendar-nav-group">
+                            <button type="button" class="flow-icon-btn" id="cal-prev-month-btn" title="上個月">◀</button>
+                            <span class="calendar-month-title" id="calendar-month-title">2026 年 11 月</span>
+                            <button type="button" class="flow-icon-btn" id="cal-next-month-btn" title="下個月">▶</button>
+                            <button type="button" class="flow-icon-btn" id="cal-today-btn" title="回到今天">今天</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Weekday Headers (Mon - Sun) -->
+                <div class="study-calendar-weekdays">
+                    <div>週一 Mon</div>
+                    <div>週二 Tue</div>
+                    <div>週三 Wed</div>
+                    <div>週四 Thu</div>
+                    <div>週五 Fri</div>
+                    <div class="weekend">週六 Sat</div>
+                    <div class="weekend">週日 Sun</div>
+                </div>
+
+                <!-- Calendar Days Grid -->
+                <div class="study-calendar-grid" id="study-calendar-grid">
+                    <!-- Populated dynamically by script.js -->
                 </div>
             </div>
 
